@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,42 @@ export default function HomeTab() {
     [key: string]: number;
   }>({});
   const [userProfile, setUserProfile] = useState<any>(null);
+  // Timer state
+  const [timer, setTimer] = useState(10);
+  const [questionTimes, setQuestionTimes] = useState<{ [key: string]: number }>({});
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset timer when question changes
+  useEffect(() => {
+    setTimer(10);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => prev - 1);
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [currentQuestionIndex]);
+
+  // Handle timer reaching zero
+  useEffect(() => {
+    if (timer === 0) {
+      const currentQ = questions[currentQuestionIndex];
+      if (currentQ) {
+        // If not answered, mark as unanswered (or pick default)
+        if (selectedAnswers[currentQ.id] == null) {
+          handleAnswer(currentQ.id, 0); // Default to first option
+        }
+        // Save time taken
+        setQuestionTimes((prev) => ({ ...prev, [currentQ.id]: 10 }));
+      }
+      if (currentQuestionIndex < questions.length - 1) {
+        setCurrentQuestionIndex((prev) => prev + 1);
+      } else {
+        handleSubmitQuiz();
+      }
+    }
+  }, [timer]);
 
   React.useEffect(() => {
     if (user) {
@@ -52,26 +88,31 @@ export default function HomeTab() {
     }
   };
 
+  // Save time taken when user answers
   const handleAnswer = (questionId: string, answerIndex: number) => {
     setSelectedAnswers((prev) => ({
       ...prev,
       [questionId]: answerIndex,
     }));
+    // Save time taken for this question
+    setQuestionTimes((prev) => ({
+      ...prev,
+      [questionId]: 10 - timer,
+    }));
   };
 
   const handleSubmitQuiz = async () => {
     if (!todaysQuiz || questions.length === 0) return;
-
+    if (timerRef.current) clearInterval(timerRef.current);
     const submission = {
       answers: questions.map((question) => ({
         questionId: question.id,
         selectedOptionId:
           question.options[selectedAnswers[question.id] || 0].id,
-        timeTaken: 0, // TODO: Add timer functionality
+        timeTaken: questionTimes[question.id] || 10,
       })),
-      totalTimeTaken: 0, // TODO: Add timer functionality
+      totalTimeTaken: questions.reduce((acc, q) => acc + (questionTimes[q.id] || 10), 0),
     };
-
     try {
       await submitQuiz(submission);
       await loadUserProfile(); // Refresh user stats
@@ -165,7 +206,12 @@ export default function HomeTab() {
                 total={questions.length}
               />
             </View>
-
+            {/* Timer Display */}
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: timer <= 3 ? '#EF4444' : '#F59E0B', fontSize: 20, fontWeight: 'bold' }}>
+                {timer}s
+              </Text>
+            </View>
             <View style={styles.questionContainer}>
               <TriviaQuestion
                 question={questions[currentQuestionIndex]}
@@ -177,7 +223,6 @@ export default function HomeTab() {
                 }
               />
             </View>
-
             <View style={styles.navigationContainer}>
               {currentQuestionIndex > 0 && (
                 <TouchableOpacity
@@ -187,7 +232,6 @@ export default function HomeTab() {
                   <Text style={styles.navButtonText}>Previous</Text>
                 </TouchableOpacity>
               )}
-
               {currentQuestionIndex < questions.length - 1 ? (
                 <TouchableOpacity
                   style={[

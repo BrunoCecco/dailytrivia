@@ -80,4 +80,16 @@ export class UsersAPI {
     if (error) throw error;
     return data || [];
   }
+
+  static async getAchievements(): Promise<any[]> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    const { data, error } = await supabase
+      .from('user_achievements')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('unlocked_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
 }
