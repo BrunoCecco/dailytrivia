@@ -30,6 +30,24 @@ import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 
+// Helper to map achievement type/id to icon and color
+const achievementIconMap: Record<string, any> = {
+  'perfect_week': Crown,
+  'streak_master': Flame,
+  'league_champion': Trophy,
+  'social_butterfly': Award,
+  'lightning_fast': Zap,
+  // Add more mappings as needed
+};
+const achievementColorMap: Record<string, string> = {
+  'perfect_week': '#F59E0B',
+  'streak_master': '#EF4444',
+  'league_champion': '#EC4899',
+  'social_butterfly': '#6366F1',
+  'lightning_fast': '#F59E0B',
+  // Add more mappings as needed
+};
+
 export default function ProfileScreen() {
   const [stats, setStats] = useState<any>({});
   const [achievements, setAchievements] = useState<any[]>([]);
@@ -41,6 +59,16 @@ export default function ProfileScreen() {
 
   const { user, session, profile, signIn, signOut } = useAuth();
 
+  // Fetch achievements from the backend
+  const fetchAchievements = async () => {
+    try {
+      const data = await UsersAPI.getAchievements();
+      setAchievements(data || []);
+    } catch (err) {
+      setAchievements([]);
+    }
+  };
+
   const fetchProfile = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -51,7 +79,7 @@ export default function ProfileScreen() {
         currentStreak: profile?.current_streak || 0,
         longestStreak: profile?.longest_streak || 0,
         totalPoints: profile?.total_points || 0,
-        // Removed averageScore, rank, correctAnswers
+        // Add more stats as needed from profile
       });
       // Fetch quiz history for weekly data
       const history = await QuizAPI.getQuizHistory(7);
@@ -64,61 +92,15 @@ export default function ProfileScreen() {
           score: attempt.score,
         }))
       );
-      // Achievements (mocked for now, can be fetched from backend if available)
-      setAchievements([
-        {
-          id: 1,
-          name: 'Perfect Week',
-          description: 'Score 5/5 for 7 days straight',
-          icon: Crown,
-          color: '#F59E0B',
-          unlocked: (profile?.longest_streak ?? 0) >= 7,
-          date: (profile?.longest_streak ?? 0) >= 7 ? '2024-01-15' : undefined,
-        },
-        {
-          id: 2,
-          name: 'Streak Master',
-          description: 'Maintain a 14-day streak',
-          icon: Flame,
-          color: '#EF4444',
-          unlocked: (profile?.longest_streak ?? 0) >= 14,
-          date: (profile?.longest_streak ?? 0) >= 14 ? '2024-01-10' : undefined,
-        },
-        {
-          id: 3,
-          name: 'League Champion',
-          description: 'Finish #1 in a league',
-          icon: Trophy,
-          color: '#EC4899',
-          unlocked: false,
-        },
-        // Removed Knowledge Seeker achievement (correct_answers)
-        {
-          id: 5,
-          name: 'Social Butterfly',
-          description: 'Add 10 friends',
-          icon: Award,
-          color: '#6366F1',
-          unlocked: false,
-          progress: 7,
-        },
-        {
-          id: 6,
-          name: 'Lightning Fast',
-          description: 'Answer in under 5 seconds',
-          icon: Zap,
-          color: '#F59E0B',
-          unlocked: false,
-          progress: 3,
-        },
-      ]);
+      // Fetch achievements from backend
+      await fetchAchievements();
     } catch (err: any) {
       setError(err.message || 'Failed to load profile');
       setLoading(false);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     fetchProfile();
@@ -139,59 +121,63 @@ export default function ProfileScreen() {
     </View>
   );
 
-  const renderAchievement = (achievement: any) => (
-    <View
-      key={achievement.id}
-      style={[
-        styles.achievementCard,
-        !achievement.unlocked && styles.lockedAchievement,
-      ]}
-    >
+  const renderAchievement = (achievement: any) => {
+    const icon = achievementIconMap[achievement.type || achievement.id] || Trophy;
+    const color = achievementColorMap[achievement.type || achievement.id] || '#6366F1';
+    return (
       <View
+        key={achievement.id}
         style={[
-          styles.achievementIcon,
-          { backgroundColor: `${achievement.color}20` },
+          styles.achievementCard,
+          !achievement.unlocked && styles.lockedAchievement,
         ]}
       >
-        {React.createElement(achievement.icon, {
-          size: 24,
-          color: achievement.unlocked ? achievement.color : '#6B7280',
-        })}
-      </View>
-      <View style={styles.achievementContent}>
-        <Text
+        <View
           style={[
-            styles.achievementName,
-            !achievement.unlocked && styles.lockedText,
+            styles.achievementIcon,
+            { backgroundColor: `${color}20` },
           ]}
         >
-          {achievement.name}
-        </Text>
-        <Text style={styles.achievementDescription}>
-          {achievement.description}
-        </Text>
-        {achievement.unlocked ? (
-          <Text style={styles.achievementDate}>
-            Unlocked {achievement.date}
+          {React.createElement(icon, {
+            size: 24,
+            color: achievement.unlocked ? color : '#6B7280',
+          })}
+        </View>
+        <View style={styles.achievementContent}>
+          <Text
+            style={[
+              styles.achievementName,
+              !achievement.unlocked && styles.lockedText,
+            ]}
+          >
+            {achievement.name}
           </Text>
-        ) : (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${(achievement.progress / 10) * 100}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.progressText}>
-              {achievement.progress || 0}/10
+          <Text style={styles.achievementDescription}>
+            {achievement.description}
+          </Text>
+          {achievement.unlocked ? (
+            <Text style={styles.achievementDate}>
+              Unlocked {achievement.unlocked_at ? new Date(achievement.unlocked_at).toLocaleDateString() : ''}
             </Text>
-          </View>
-        )}
+          ) : achievement.progress_total ? (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${((achievement.progress_current || 0) / achievement.progress_total) * 100}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {achievement.progress_current || 0}/{achievement.progress_total}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
